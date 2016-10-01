@@ -8,6 +8,7 @@
 
 #import "HMSegmentedControl.h"
 #import <QuartzCore/QuartzCore.h>
+#import <CoreText/CoreText.h>
 #import <math.h>
 
 @interface HMScrollView : UIScrollView
@@ -222,11 +223,13 @@
     BOOL selected = (index == self.selectedSegmentIndex) ? YES : NO;
     if ([title isKindOfClass:[NSString class]] && !self.titleFormatter) {
         NSDictionary *titleAttrs = selected ? [self resultingSelectedTitleTextAttributes] : [self resultingTitleTextAttributes];
-        size = [(NSString *)title sizeWithAttributes:titleAttrs];
+//        size = [(NSString *)title sizeWithAttributes:titleAttrs];
+        NSAttributedString *formatted = [[NSAttributedString alloc] initWithString:title attributes:titleAttrs];
+        size = [self sizeOfAttributedString:formatted];
     } else if ([title isKindOfClass:[NSString class]] && self.titleFormatter) {
         size = [self.titleFormatter(self, title, index, selected) size];
     } else if ([title isKindOfClass:[NSAttributedString class]]) {
-        size = [(NSAttributedString *)title size];
+        size = [self sizeOfAttributedString:title];
     } else {
         NSAssert(title == nil, @"Unexpected type of segment title: %@", [title class]);
         size = CGSizeZero;
@@ -234,13 +237,27 @@
     return CGRectIntegral((CGRect){CGPointZero, size}).size;
 }
 
+- (CGSize)sizeOfAttributedString:(NSAttributedString*)atTitle {
+    CTFramesetterRef fs = CTFramesetterCreateWithAttributedString((__bridge CFAttributedStringRef)atTitle);
+    CGSize coreTextSize = CTFramesetterSuggestFrameSizeWithConstraints(fs, CFRangeMake(0, (CFIndex)atTitle.length), NULL, CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX), NULL);
+    CFRelease(fs);
+    CGSize nsStrSize = atTitle.size;
+    
+    CGSize result;
+    result.width = MAX(nsStrSize.width, coreTextSize.width);      // core text returns too small width
+    result.height = MAX(nsStrSize.height, coreTextSize.height);   // NSAttributedString builtin returns too small height
+    
+    return result;
+}
+
 - (NSAttributedString *)attributedTitleAtIndex:(NSUInteger)index {
-    id title = self.sectionTitles[index];
+    NSString *title = self.sectionTitles[index];
+    if ([title isKindOfClass:[NSAttributedString class]])       // in case it is ALREADY attributed string.
+        return title;
+    
     BOOL selected = (index == self.selectedSegmentIndex) ? YES : NO;
     
-    if ([title isKindOfClass:[NSAttributedString class]]) {
-        return (NSAttributedString *)title;
-    } else if (!self.titleFormatter) {
+    if (!self.titleFormatter) {
         NSDictionary *titleAttrs = selected ? [self resultingSelectedTitleTextAttributes] : [self resultingTitleTextAttributes];
         
         // the color should be cast to CGColor in order to avoid invalid context on iOS7
@@ -319,9 +336,7 @@
             CATextLayer *titleLayer = [CATextLayer layer];
             titleLayer.frame = rect;
             titleLayer.alignmentMode = kCAAlignmentCenter;
-            if ([UIDevice currentDevice].systemVersion.floatValue < 10.0 ) {
-                titleLayer.truncationMode = kCATruncationEnd;
-            }
+            titleLayer.truncationMode = kCATruncationEnd;
             titleLayer.string = [self attributedTitleAtIndex:idx];
             titleLayer.contentsScale = [[UIScreen mainScreen] scale];
             
@@ -420,9 +435,8 @@
             titleLayer.frame = textRect;
             titleLayer.alignmentMode = kCAAlignmentCenter;
             titleLayer.string = [self attributedTitleAtIndex:idx];
-            if ([UIDevice currentDevice].systemVersion.floatValue < 10.0 ) {
-                titleLayer.truncationMode = kCATruncationEnd;
-            }
+            titleLayer.truncationMode = kCATruncationEnd;
+			
             CALayer *imageLayer = [CALayer layer];
             imageLayer.frame = imageRect;
 			
@@ -692,12 +706,7 @@
     UITouch *touch = [touches anyObject];
     CGPoint touchLocation = [touch locationInView:self];
     
-    CGRect enlargeRect =   CGRectMake(self.bounds.origin.x - self.enlargeEdgeInset.left,
-                      self.bounds.origin.y - self.enlargeEdgeInset.top,
-                      self.bounds.size.width + self.enlargeEdgeInset.left + self.enlargeEdgeInset.right,
-                      self.bounds.size.height + self.enlargeEdgeInset.top + self.enlargeEdgeInset.bottom);
-    
-    if (CGRectContainsPoint(enlargeRect, touchLocation)) {
+    if (CGRectContainsPoint(self.bounds, touchLocation)) {
         NSInteger segment = 0;
         if (self.segmentWidthStyle == HMSegmentedControlSegmentWidthStyleFixed) {
             segment = (touchLocation.x + self.scrollView.contentOffset.x) / self.segmentWidth;
