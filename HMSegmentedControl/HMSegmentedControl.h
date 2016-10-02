@@ -192,6 +192,8 @@ typedef NS_ENUM(NSInteger, HMSegmentedControlType) {
  */
 @property (nonatomic, readwrite) CGFloat selectionIndicatorHeight;
 
+@property (nonatomic, assign) BOOL selectionIndicatorAffectsVerticalAlignment;
+
 /**
  Edge insets for the selection indicator.
  NOTE: This does not affect the bounding box of HMSegmentedControlSelectionStyleBox
